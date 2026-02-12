@@ -3,48 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>股票查询小程序</title>
+  <title>加密货币价格查询</title>
 </head>
 <body>
-  <h1>股票价格查询</h1>
+  <h1>加密货币价格查询（CoinGecko）</h1>
 
-  <input id="symbol" placeholder="输入股票代码，例如 AAPL">
-  <button onclick="searchStock()">查询</button>
+  <p>
+    输入币种（英文 id），例如：
+    <b>bitcoin</b> / <b>ethereum</b> / <b>solana</b> / <b>dogecoin</b>
+  </p>
+
+  <input id="coin" placeholder="例如 bitcoin" />
+  <button onclick="searchCoin()">查询</button>
 
   <h2 id="result"></h2>
 
   <script>
-    async function searchStock() {
-      const symbol = document.getElementById("symbol").value.trim().toUpperCase();
+    async function searchCoin() {
+      const id = document.getElementById("coin").value.trim().toLowerCase();
+      const result = document.getElementById("result");
 
-      if (!symbol) {
-        alert("请输入股票代码");
+      if (!id) {
+        alert("请输入币种 id，例如 bitcoin");
         return;
       }
 
+      result.textContent = "查询中…";
+
       try {
-        const response = await fetch(
-          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`
-        );
-        const data = await response.json();
+        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(id)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
 
-        const quote = data.quoteResponse.result[0];
+        const data = await resp.json();
+        const coin = data[0];
 
-        if (!quote) {
-          document.getElementById("result").textContent = "未找到该股票";
+        if (!coin) {
+          result.innerHTML = "未找到该币种。<br>试试：bitcoin / ethereum / solana / dogecoin";
           return;
         }
 
-        const price = quote.regularMarketPrice;
-        const change = quote.regularMarketChange;
-        const percent = quote.regularMarketChangePercent;
+        const price = coin.current_price;
+        const chg = coin.price_change_24h;
+        const pct = coin.price_change_percentage_24h;
+        const mcap = coin.market_cap;
 
-        document.getElementById("result").innerHTML =
-          `当前价格：${price} <br>
-           涨跌：${change.toFixed(2)} <br>
-           涨跌幅：${percent.toFixed(2)}%`;
-      } catch (error) {
-        document.getElementById("result").textContent = "查询失败";
+        result.innerHTML = `
+          <div>
+            <b>${coin.name}</b>（${coin.symbol.toUpperCase()}）<br>
+            当前价格：$${price}<br>
+            24小时涨跌：${(chg ?? 0).toFixed(4)}<br>
+            24小时涨跌幅：${(pct ?? 0).toFixed(2)}%<br>
+            市值：$${mcap?.toLocaleString?.() ?? mcap}
+          </div>
+        `;
+      } catch (e) {
+        result.textContent = "查询失败（可能是网络或 API 暂时限制），稍后再试。";
       }
     }
   </script>
