@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>地理小词典</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; margin: 18px; }
+    a { text-decoration: none; }
+    .top { display:flex; justify-content: space-between; align-items:center; gap: 12px; }
+    .card { border:1px solid #ddd; border-radius: 12px; padding: 14px; margin: 12px 0; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .k { color:#666; font-size: 13px; }
+    .v { font-size: 15px; }
+    input { padding: 10px; width: 220px; max-width: 60vw; }
+    button { padding: 10px 12px; }
+    .muted { color:#666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>🌍 地理小词典</h1>
+    <a href="index.html">← 回到首页</a>
+  </div>
+
+  <p class="muted">输入国家/城市/景点名称（英文或本地名都可以），先做页面结构，下一步接入 Wikidata/Wikipedia/OSM 数据。</p>
+
+  <div class="card">
+    <input id="q" placeholder="例如: Paris / France / Eiffel Tower" />
+    <button onclick="demo()">查询</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div class="card">
+    <h2>基础信息</h2>
+    <div class="grid">
+      <div><div class="k">英文名</div><div class="v" id="en">-</div></div>
+      <div><div class="k">法文名</div><div class="v" id="fr">-</div></div>
+      <div><div class="k">类型</div><div class="v" id="type">-</div></div>
+      <div><div class="k">一句话描述</div><div class="v" id="desc">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>位置与层级</h2>
+    <div class="grid">
+      <div><div class="k">国家</div><div class="v" id="country">-</div></div>
+      <div><div class="k">城市/地区</div><div class="v" id="admin">-</div></div>
+      <div><div class="k">位置描述</div><div class="v" id="where">-</div></div>
+      <div><div class="k">坐标</div><div class="v" id="coord">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>关键数据</h2>
+    <div class="grid">
+      <div><div class="k">人口</div><div class="v" id="pop">-</div></div>
+      <div><div class="k">面积（km²）</div><div class="v" id="area">-</div></div>
+      <div><div class="k">货币</div><div class="v" id="ccy">-</div></div>
+      <div><div class="k">突出特点</div><div class="v" id="feature">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>附近 3 个著名景点</h2>
+    <ol>
+      <li id="poi1">-</li>
+      <li id="poi2">-</li>
+      <li id="poi3">-</li>
+    </ol>
+    <p class="muted">酒店价格：先做“示例/估计模块”，下一步再决定用模拟数据还是可用旅行 API。</p>
+  </div>
+
+  <script>
+    // 先用 demo 数据验证页面结构正常（下一步再接真实 API）
+    function demo(){
+      const q = document.getElementById('q').value.trim();
+      document.getElementById('status').textContent = q ? `（演示）你搜索了：${q}` : '请输入关键词';
+
+      // Demo 填充
+      en.textContent = q || 'Paris';
+      fr.textContent = q ? `${q}（FR示例）` : 'Paris';
+      type.textContent = '城市（示例）';
+      desc.textContent = '一个适合快速浏览的知识卡片（示例文本）';
+
+      country.textContent = 'France';
+      admin.textContent = 'Île-de-France';
+      where.textContent = '位于法国北部，塞纳河沿岸（示例）';
+      coord.textContent = '48.8566, 2.3522';
+
+      pop.textContent = '2,161,000（示例）';
+      area.textContent = '105.4（示例）';
+      ccy.textContent = 'EUR';
+      feature.textContent = '文化、旅游、金融（示例）';
+
+      poi1.textContent = 'Eiffel Tower（示例）';
+      poi2.textContent = 'Louvre Museum（示例）';
+      poi3.textContent = 'Notre-Dame Cathedral（示例）';
+    }
+  </script>
+</body>
+</html>
