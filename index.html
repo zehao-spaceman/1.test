@@ -1,145 +1,30 @@
 <!doctype html>
 <html lang="zh">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>汇率可视化工具</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-body { font-family: Arial; margin: 15px; }
-.controls { margin-bottom: 15px; }
-.row { display: flex; flex-wrap: wrap; gap: 12px; }
-.card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; width: 360px; }
-canvas { width:100%!important; height:220px!important; }
-select, input, button { padding: 6px; margin-right: 6px; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的工具箱</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; margin: 18px; }
+    .box { border: 1px solid #ddd; border-radius: 12px; padding: 14px; margin: 12px 0; }
+    a.btn { display: inline-block; padding: 10px 12px; border: 1px solid #333; border-radius: 10px; text-decoration: none; margin-right: 10px; }
+    .muted { color:#666; font-size: 14px; }
+  </style>
 </head>
-
 <body>
+  <h1>我的工具箱</h1>
+  <p class="muted">两个工具共存：汇率可视化 + 地理小词典（知识速览）。</p>
 
-<h2>全球汇率可视化工具</h2>
+  <div class="box">
+    <h2>💱 货币汇率可视化</h2>
+    <p class="muted">多币种 + 30天/半年/一年/三年窗口。</p>
+    <a class="btn" href="currency.html">打开汇率工具</a>
+  </div>
 
-<div class="controls">
-本币：
-<input id="base" value="EUR"/>
-
-时间窗口：
-<select id="range">
-  <option value="30">30天</option>
-  <option value="180">半年</option>
-  <option value="365">一年</option>
-  <option value="1095">三年</option>
-</select>
-
-<button onclick="run()">生成图表</button>
-</div>
-
-<div id="status"></div>
-<div class="row" id="charts"></div>
-
-<script>
-
-// 20+ 主要货币
-const TARGETS = [
-"USD","EUR","GBP","JPY","CNY","HKD","AUD","CAD","CHF",
-"SEK","NZD","SGD","KRW","INR","MXN","BRL","ZAR",
-"NOK","DKK","PLN","THB","TRY","RUB"
-];
-
-const chartMap = new Map();
-
-function isoDate(d){
-  return d.toISOString().split("T")[0];
-}
-
-function getRange(days){
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - days);
-  return {start: isoDate(start), end: isoDate(end)};
-}
-
-function clearCharts(){
-  chartMap.forEach(c=>c.destroy());
-  chartMap.clear();
-  document.getElementById("charts").innerHTML="";
-}
-
-async function run(){
-
-  const base = document.getElementById("base").value.toUpperCase();
-  const days = parseInt(document.getElementById("range").value);
-
-  if(base.length!==3){
-    alert("请输入三位货币代码");
-    return;
-  }
-
-  clearCharts();
-  document.getElementById("status").innerText="加载中...";
-
-  const targets = TARGETS.filter(t=>t!==base);
-
-  const {start,end} = getRange(days);
-
-  const url = `https://api.frankfurter.dev/v1/${start}..${end}?base=${base}&symbols=${targets.join(",")}`;
-
-  try{
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const dates = Object.keys(data.rates).sort();
-
-    const chartsDiv = document.getElementById("charts");
-
-    targets.forEach(t=>{
-
-      const card = document.createElement("div");
-      card.className="card";
-      card.innerHTML=`<h4>${base} → ${t}</h4><canvas id="c_${t}"></canvas>`;
-      chartsDiv.appendChild(card);
-
-      const series = dates.map(d => data.rates[d][t] ?? null);
-
-      const ctx = document.getElementById(`c_${t}`).getContext("2d");
-
-      const chart = new Chart(ctx,{
-        type:"line",
-        data:{
-          labels:dates,
-          datasets:[{
-            label:`${base}/${t}`,
-            data:series,
-            borderWidth:1,
-            tension:0.2
-          }]
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          scales:{
-            x:{ticks:{maxTicksLimit:6}}
-          }
-        }
-      });
-
-      chartMap.set(t,chart);
-
-    });
-
-    document.getElementById("status").innerText=
-      `完成：${base} 汇率走势 (${start} 至 ${end})`;
-
-  }catch(e){
-    document.getElementById("status").innerText="数据获取失败";
-  }
-}
-
-run();
-
-</script>
-
+  <div class="box">
+    <h2>🌍 国家/城市/景点小词典</h2>
+    <p class="muted">快速查看：英/法名称、类型、位置、人口、面积、货币、特点、附近景点。</p>
+    <a class="btn" href="dictionary.html">打开小词典</a>
+  </div>
 </body>
 </html>
