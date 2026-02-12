@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>复利计算器</title>
+</head>
+<body>
+  <h1>复利计算器</h1>
+
+  <label>本金（P）：<input id="p" type="number" value="10000"></label><br><br>
+  <label>年利率（%）：<input id="r" type="number" value="5"></label><br><br>
+  <label>年数（t）：<input id="t" type="number" value="10"></label><br><br>
+
+  <button onclick="calc()">计算</button>
+
+  <h2 id="out"></h2>
+
+  <script>
+    function calc() {
+      const P = Number(document.getElementById('p').value);
+      const r = Number(document.getElementById('r').value) / 100;
+      const t = Number(document.getElementById('t').value);
+
+      const A = P * Math.pow(1 + r, t);
+      document.getElementById('out').textContent =
+        `未来价值：${A.toFixed(2)}（收益：${(A - P).toFixed(2)}）`;
+    }
+  </script>
+</body>
+</html>
