@@ -1,13 +1,91 @@
- <script>
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>地理小词典</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; margin: 18px; }
+    .top { display:flex; justify-content: space-between; align-items:center; gap: 10px; }
+    a { text-decoration: none; }
+    .card { border:1px solid #ddd; border-radius: 12px; padding: 14px; margin: 12px 0; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .k { color:#666; font-size: 13px; }
+    .v { font-size: 15px; line-height: 1.35; }
+    input { padding: 10px; width: 260px; max-width: 70vw; }
+    button { padding: 10px 12px; }
+    .muted { color:#666; font-size: 14px; }
+    #status { margin-top: 8px; }
+    ol { margin: 8px 0 0 18px; }
+  </style>
+</head>
+
+<body>
+  <div class="top">
+    <h1>🌍 地理小词典</h1>
+    <a href="index.html">← 回到首页</a>
+  </div>
+
+  <div class="card">
+    <div>
+      <input id="q" placeholder="例如: Paris / France / Eiffel Tower"
+             onkeydown="if(event.key==='Enter') lookup()" />
+      <button onclick="lookup()">查询</button>
+    </div>
+    <div id="status" class="muted"></div>
+    <div class="muted">提示：有些条目可能没有人口/面积/货币（Wikidata 条目本身未填）。</div>
+  </div>
+
+  <div class="card">
+    <h2>基础信息</h2>
+    <div class="grid">
+      <div><div class="k">英文名</div><div class="v" id="en">-</div></div>
+      <div><div class="k">法文名</div><div class="v" id="fr">-</div></div>
+      <div><div class="k">类型</div><div class="v" id="type">-</div></div>
+      <div><div class="k">一句话描述</div><div class="v" id="desc">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>位置与层级</h2>
+    <div class="grid">
+      <div><div class="k">国家</div><div class="v" id="country">-</div></div>
+      <div><div class="k">行政区/上级区域</div><div class="v" id="admin">-</div></div>
+      <div><div class="k">位置描述</div><div class="v" id="where">-</div></div>
+      <div><div class="k">坐标</div><div class="v" id="coord">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>关键数据</h2>
+    <div class="grid">
+      <div><div class="k">人口</div><div class="v" id="pop">-</div></div>
+      <div><div class="k">面积（km²）</div><div class="v" id="area">-</div></div>
+      <div><div class="k">货币</div><div class="v" id="ccy">-</div></div>
+      <div><div class="k">突出特点（简易）</div><div class="v" id="feature">-</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>附近 3 个著名景点（可能稍慢）</h2>
+    <ol>
+      <li id="poi1">-</li>
+      <li id="poi2">-</li>
+      <li id="poi3">-</li>
+    </ol>
+    <div class="muted">若这里一直是“-”，通常是 Overpass 暂时限流/慢，稍后再试。</div>
+  </div>
+
+<script>
   // ---- 公开 API 端点 ----
   const WD_API = "https://www.wikidata.org/w/api.php";
-  const WP_REST_SEARCH = "https://en.wikipedia.org/w/rest.php/v1/search/page"; //  [oai_citation:4‡MediaWiki](https://www.mediawiki.org/wiki/API%3AREST_API/Get_started?utm_source=chatgpt.com)
-  const OVERPASS = "https://overpass-api.de/api/interpreter"; // Overpass 示例见 OSM Wiki  [oai_citation:5‡OpenStreetMap](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_API_by_Example?utm_source=chatgpt.com)
+  const WP_REST_SEARCH = "https://en.wikipedia.org/w/rest.php/v1/search/page";
+  const OVERPASS = "https://overpass-api.de/api/interpreter";
 
-  // 你希望“附近景点”搜索半径（米）
+  // “附近景点”搜索半径（米）
   const POI_RADIUS_M = 7000;
 
-  // 主要属性（Wikidata Property IDs）
+  // Wikidata Property IDs
   const P = {
     INSTANCE_OF: "P31",
     COUNTRY: "P17",
@@ -18,15 +96,31 @@
     CURRENCY: "P38",
   };
 
-  // ---- 小工具：写入 UI ----
+  // ---- UI helpers ----
   function setStatus(msg) { document.getElementById("status").textContent = msg || ""; }
   function setText(id, v) { document.getElementById(id).textContent = (v ?? "-"); }
-  function fmtNum(n) {
-    if (n === null || n === undefined) return "-";
-    try { return Number(n).toLocaleString(); } catch { return String(n); }
+
+  function toNumberMaybe(x) {
+    // Wikidata 数量经常是 {amount:"+12345", ...}
+    if (x === null || x === undefined) return null;
+    if (typeof x === "number") return x;
+    if (typeof x === "string") {
+      const n = Number(x);
+      return Number.isFinite(n) ? n : null;
+    }
+    if (typeof x === "object" && typeof x.amount === "string") {
+      const n = Number(x.amount);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
   }
 
-  // ---- fetch JSONP-like: Wikidata 允许 origin=* 跨域 ----
+  function fmtNum(x) {
+    const n = toNumberMaybe(x);
+    if (n === null) return "-";
+    return n.toLocaleString();
+  }
+
   async function wdFetch(params) {
     const url = WD_API + "?" + new URLSearchParams({ ...params, format: "json", origin: "*" }).toString();
     const r = await fetch(url);
@@ -34,50 +128,45 @@
     return r.json();
   }
 
-  // 1) 用用户输入去 Wikidata 搜实体（拿 QID）
   async function wdSearchEntity(query, lang="en") {
     const data = await wdFetch({
       action: "wbsearchentities",
       search: query,
       language: lang,
       limit: 1
-    }); // wbsearchentities 用法  [oai_citation:6‡GitHub](https://github.com/maxlath/wikibase-sdk/blob/main/docs/search_entities.md?utm_source=chatgpt.com)
+    });
     return data?.search?.[0] || null;
   }
 
-  // 2) 用 QID 拉实体详情（含声明 statements）
   async function wdGetEntity(qid) {
     const data = await wdFetch({
       action: "wbgetentities",
       ids: qid,
       props: "labels|descriptions|claims|sitelinks",
       languages: "en|fr"
-    }); // wbgetentities 端点说明  [oai_citation:7‡MediaWiki](https://www.mediawiki.org/wiki/Wikibase/API?utm_source=chatgpt.com)
+    });
     return data?.entities?.[qid] || null;
   }
 
-  // 3) 从 claims 里提取“数值/实体/坐标”
   function getFirstClaim(entity, prop) {
     const arr = entity?.claims?.[prop];
     if (!arr || !arr.length) return null;
     return arr[0]?.mainsnak?.datavalue?.value ?? null;
   }
 
+  function getEntityIdFromValue(v) {
+    return v?.id || null; // { id:"Qxxx" }
+  }
+
+  function getCoord(v) {
+    if (!v || typeof v.latitude !== "number" || typeof v.longitude !== "number") return null;
+    return { lat: v.latitude, lon: v.longitude };
+  }
+
   async function qidToLabel(qid, lang="en") {
     if (!qid) return null;
     const ent = await wdGetEntity(qid);
     return ent?.labels?.[lang]?.value || ent?.labels?.en?.value || qid;
-  }
-
-  function getEntityIdFromValue(v) {
-    // v: { "entity-type":"item", "numeric-id": 90, "id":"Q90" }
-    return v?.id || null;
-  }
-
-  function getCoord(v) {
-    // v: { latitude, longitude, ... }
-    if (!v || typeof v.latitude !== "number" || typeof v.longitude !== "number") return null;
-    return { lat: v.latitude, lon: v.longitude };
   }
 
   function pickTypeLabelFromInstanceOf(instanceLabel) {
@@ -90,7 +179,6 @@
     return instanceLabel || "（未识别类型）";
   }
 
-  // 4) Wikipedia：用 REST Search 找到最接近的页面摘要/标题
   async function wpSearchSummary(query) {
     const url = WP_REST_SEARCH + "?" + new URLSearchParams({ q: query, limit: "1" }).toString();
     const r = await fetch(url);
@@ -98,7 +186,6 @@
     const j = await r.json();
     const page = j?.pages?.[0];
     if (!page) return null;
-    // page.title / page.description / page.excerpt 可能有
     return {
       title: page.title,
       description: page.description || "",
@@ -106,9 +193,7 @@
     };
   }
 
-  // 5) Overpass：按坐标找附近景点（旅游点）
   async function fetchNearbyAttractions(lat, lon) {
-    // 简化：查 tourism=attraction / museum / viewpoint / monument
     const q = `
       [out:json][timeout:25];
       (
@@ -123,11 +208,8 @@
     if (!r.ok) return [];
     const j = await r.json();
     const els = j?.elements || [];
-    const names = els
-      .map(e => e?.tags?.name)
-      .filter(Boolean);
+    const names = els.map(e => e?.tags?.name).filter(Boolean);
 
-    // 去重 + 取前 3
     const uniq = [];
     for (const n of names) {
       if (!uniq.includes(n)) uniq.push(n);
@@ -141,19 +223,14 @@
     if (!query) { alert("请输入国家/城市/景点名称"); return; }
 
     setStatus("查询中…");
-    // 先清空
     ["en","fr","type","desc","country","admin","where","coord","pop","area","ccy","feature","poi1","poi2","poi3"]
       .forEach(id => setText(id, "-"));
 
     try {
-      // A) Wikidata 搜实体（优先用英文搜索）
       const hit = await wdSearchEntity(query, "en");
-      if (!hit?.id) {
-        setStatus("未在 Wikidata 找到匹配条目");
-        return;
-      }
+      if (!hit?.id) { setStatus("未在 Wikidata 找到匹配条目"); return; }
 
-      const qid = hit.id; // e.g. Q90
+      const qid = hit.id;
       const entity = await wdGetEntity(qid);
 
       // labels
@@ -162,7 +239,7 @@
       setText("en", enLabel);
       setText("fr", frLabel);
 
-      // instance of -> type
+      // instance-of/type
       const instVal = getFirstClaim(entity, P.INSTANCE_OF);
       const instQid = getEntityIdFromValue(instVal);
       const instLabel = instQid ? await qidToLabel(instQid, "en") : null;
@@ -174,7 +251,7 @@
       const countryLabel = countryQid ? await qidToLabel(countryQid, "en") : "-";
       setText("country", countryLabel);
 
-      // admin (located in the administrative territorial entity)
+      // admin
       const adminVal = getFirstClaim(entity, P.LOCATED_IN_ADMIN);
       const adminQid = getEntityIdFromValue(adminVal);
       const adminLabel = adminQid ? await qidToLabel(adminQid, "en") : "-";
@@ -185,37 +262,28 @@
       const coord = getCoord(coordVal);
       if (coord) setText("coord", `${coord.lat.toFixed(4)}, ${coord.lon.toFixed(4)}`);
 
-      // population / area / currency
+      // pop / area / currency
       const popVal = getFirstClaim(entity, P.POP);
       const areaVal = getFirstClaim(entity, P.AREA);
       const curVal = getFirstClaim(entity, P.CURRENCY);
       const curQid = getEntityIdFromValue(curVal);
       const curLabel = curQid ? await qidToLabel(curQid, "en") : "-";
 
-      setText("pop", popVal ? fmtNum(popVal.amount ? Number(popVal.amount) : popVal) : "-");
-      setText("area", areaVal ? fmtNum(areaVal.amount ? Number(areaVal.amount) : areaVal) : "-");
+      setText("pop", fmtNum(popVal));
+      setText("area", fmtNum(areaVal));
       setText("ccy", curLabel);
 
-      // B) Wikipedia：一句话描述（用 REST search 返回的 description/excerpt）
+      // wikipedia summary
       const wp = await wpSearchSummary(enLabel);
-      if (wp) {
-        // 优先 description，其次 excerpt
-        const summary = (wp.description || wp.excerpt || "").trim();
-        setText("desc", summary || (entity?.descriptions?.en?.value ?? "-"));
-      } else {
-        setText("desc", entity?.descriptions?.en?.value ?? "-");
-      }
+      const summary = (wp?.description || wp?.excerpt || "").trim();
+      setText("desc", summary || (entity?.descriptions?.en?.value ?? "-"));
 
-      // C) 位置描述（简洁）
-      if (countryLabel !== "-" && adminLabel !== "-") {
-        setText("where", `位于 ${countryLabel}（${adminLabel}）`);
-      } else if (countryLabel !== "-") {
-        setText("where", `位于 ${countryLabel}`);
-      } else {
-        setText("where", "-");
-      }
+      // where
+      if (countryLabel !== "-" && adminLabel !== "-") setText("where", `位于 ${countryLabel}（${adminLabel}）`);
+      else if (countryLabel !== "-") setText("where", `位于 ${countryLabel}`);
+      else setText("where", "-");
 
-      // D) “突出特点”先做简洁规则：从 Wikidata 描述里抓关键词（可后续升级为手动标签）
+      // feature (very simple heuristic)
       const d = (entity?.descriptions?.en?.value || "").toLowerCase();
       let feat = "-";
       if (d.includes("capital")) feat = "政治/行政中心";
@@ -225,7 +293,7 @@
       else if (d.includes("industrial") || d.includes("manufact")) feat = "工业";
       setText("feature", feat);
 
-      // E) 附近 3 个景点（需要坐标）
+      // nearby POIs
       if (coord) {
         setStatus("查询中…（正在找附近景点）");
         const pois = await fetchNearbyAttractions(coord.lat, coord.lon);
@@ -240,3 +308,6 @@
     }
   }
 </script>
+
+</body>
+</html>
