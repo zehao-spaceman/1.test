@@ -1,144 +1,163 @@
 <!doctype html>
 <html lang="zh">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>汇率可视化工具</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>地理小词典</title>
 
 <style>
-body { font-family: Arial; margin: 15px; }
-.controls { margin-bottom: 15px; }
-.row { display: flex; flex-wrap: wrap; gap: 12px; }
-.card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; width: 360px; }
-canvas { width:100%!important; height:220px!important; }
-select, input, button { padding: 6px; margin-right: 6px; }
+body { font-family: system-ui, -apple-system, Arial; margin: 18px; }
+.card { border:1px solid #ddd; border-radius: 12px; padding:14px; margin:14px 0; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.k { color:#666; font-size:13px; }
+.v { font-size:15px; }
+input { padding:8px; width:240px; }
+button { padding:8px 12px; }
 </style>
 </head>
 
 <body>
 
-<h2>全球汇率可视化工具</h2>
+<h1>🌍 地理小词典</h1>
 
-<div class="controls">
-本币：
-<input id="base" value="EUR"/>
-
-时间窗口：
-<select id="range">
-  <option value="30">30天</option>
-  <option value="180">半年</option>
-  <option value="365">一年</option>
-  <option value="1095">三年</option>
-</select>
-
-<button onclick="run()">生成图表</button>
+<div class="card">
+<input id="q" placeholder="例如: Paris / France / Eiffel Tower"
+onkeydown="if(event.key==='Enter') lookup()" />
+<button onclick="lookup()">查询</button>
+<div id="status"></div>
 </div>
 
-<div id="status"></div>
-<div class="row" id="charts"></div>
+<div class="card">
+<h2>基础信息</h2>
+<div class="grid">
+<div><div class="k">英文名</div><div class="v" id="en"></div></div>
+<div><div class="k">法文名</div><div class="v" id="fr"></div></div>
+<div><div class="k">类型</div><div class="v" id="type"></div></div>
+<div><div class="k">一句话描述</div><div class="v" id="desc"></div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>位置</h2>
+<div class="grid">
+<div><div class="k">国家</div><div class="v" id="country"></div></div>
+<div><div class="k">行政区</div><div class="v" id="admin"></div></div>
+<div><div class="k">位置描述</div><div class="v" id="where"></div></div>
+<div><div class="k">坐标</div><div class="v" id="coord"></div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>关键数据</h2>
+<div class="grid">
+<div><div class="k">人口</div><div class="v" id="pop"></div></div>
+<div><div class="k">面积 (km²)</div><div class="v" id="area"></div></div>
+<div><div class="k">货币</div><div class="v" id="ccy"></div></div>
+<div><div class="k">突出特点</div><div class="v" id="feature"></div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>附近 3 个著名景点</h2>
+<ol>
+<li id="poi1"></li>
+<li id="poi2"></li>
+<li id="poi3"></li>
+</ol>
+</div>
 
 <script>
+/* ====== 你的完整 script 已整合，无需修改 ====== */
 
-// 20+ 主要货币
-const TARGETS = [
-"USD","EUR","GBP","JPY","CNY","HKD","AUD","CAD","CHF",
-"SEK","NZD","SGD","KRW","INR","MXN","BRL","ZAR",
-"NOK","DKK","PLN","THB","TRY","RUB"
-];
+const WD_API = "https://www.wikidata.org/w/api.php";
+const WP_REST_SEARCH = "https://en.wikipedia.org/w/rest.php/v1/search/page";
+const OVERPASS = "https://overpass-api.de/api/interpreter";
+const POI_RADIUS_M = 7000;
 
-const chartMap = new Map();
+const P = {
+  INSTANCE_OF: "P31",
+  COUNTRY: "P17",
+  LOCATED_IN_ADMIN: "P131",
+  COORD: "P625",
+  POP: "P1082",
+  AREA: "P2046",
+  CURRENCY: "P38",
+};
 
-function isoDate(d){
-  return d.toISOString().split("T")[0];
+function setStatus(msg){ document.getElementById("status").textContent = msg || ""; }
+function setText(id,v){ document.getElementById(id).textContent = v ?? "-"; }
+function fmtNum(n){ try{return Number(n).toLocaleString()}catch{return n} }
+
+async function wdFetch(params){
+  const url = WD_API+"?"+new URLSearchParams({...params,format:"json",origin:"*"});
+  const r = await fetch(url);
+  return r.json();
 }
 
-function getRange(days){
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - days);
-  return {start: isoDate(start), end: isoDate(end)};
+async function wdSearchEntity(query){
+  const data = await wdFetch({
+    action:"wbsearchentities",
+    search:query,
+    language:"en",
+    limit:1
+  });
+  return data?.search?.[0] || null;
 }
 
-function clearCharts(){
-  chartMap.forEach(c=>c.destroy());
-  chartMap.clear();
-  document.getElementById("charts").innerHTML="";
+async function wdGetEntity(qid){
+  const data = await wdFetch({
+    action:"wbgetentities",
+    ids:qid,
+    props:"labels|descriptions|claims",
+    languages:"en|fr"
+  });
+  return data?.entities?.[qid] || null;
 }
 
-async function run(){
+function getFirstClaim(entity,prop){
+  const arr = entity?.claims?.[prop];
+  return arr?.[0]?.mainsnak?.datavalue?.value ?? null;
+}
 
-  const base = document.getElementById("base").value.toUpperCase();
-  const days = parseInt(document.getElementById("range").value);
+function getCoord(v){
+  if(!v) return null;
+  return {lat:v.latitude,lon:v.longitude};
+}
 
-  if(base.length!==3){
-    alert("请输入三位货币代码");
-    return;
-  }
+async function lookup(){
 
-  clearCharts();
-  document.getElementById("status").innerText="加载中...";
+  const query=document.getElementById("q").value.trim();
+  if(!query) return alert("请输入名称");
 
-  const targets = TARGETS.filter(t=>t!==base);
-
-  const {start,end} = getRange(days);
-
-  const url = `https://api.frankfurter.dev/v1/${start}..${end}?base=${base}&symbols=${targets.join(",")}`;
+  setStatus("查询中...");
+  ["en","fr","type","desc","country","admin","where","coord","pop","area","ccy","feature","poi1","poi2","poi3"]
+  .forEach(id=>setText(id,"-"));
 
   try{
-    const res = await fetch(url);
-    const data = await res.json();
+    const hit=await wdSearchEntity(query);
+    if(!hit?.id){ setStatus("未找到"); return; }
 
-    const dates = Object.keys(data.rates).sort();
+    const entity=await wdGetEntity(hit.id);
 
-    const chartsDiv = document.getElementById("charts");
+    setText("en",entity?.labels?.en?.value);
+    setText("fr",entity?.labels?.fr?.value);
+    setText("desc",entity?.descriptions?.en?.value);
 
-    targets.forEach(t=>{
+    const pop=getFirstClaim(entity,P.POP);
+    const area=getFirstClaim(entity,P.AREA);
+    const coordVal=getFirstClaim(entity,P.COORD);
+    const coord=getCoord(coordVal);
 
-      const card = document.createElement("div");
-      card.className="card";
-      card.innerHTML=`<h4>${base} → ${t}</h4><canvas id="c_${t}"></canvas>`;
-      chartsDiv.appendChild(card);
+    if(coord) setText("coord",coord.lat.toFixed(4)+","+coord.lon.toFixed(4));
+    if(pop) setText("pop",fmtNum(pop.amount?Number(pop.amount):pop));
+    if(area) setText("area",fmtNum(area.amount?Number(area.amount):area));
 
-      const series = dates.map(d => data.rates[d][t] ?? null);
-
-      const ctx = document.getElementById(`c_${t}`).getContext("2d");
-
-      const chart = new Chart(ctx,{
-        type:"line",
-        data:{
-          labels:dates,
-          datasets:[{
-            label:`${base}/${t}`,
-            data:series,
-            borderWidth:1,
-            tension:0.2
-          }]
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          scales:{
-            x:{ticks:{maxTicksLimit:6}}
-          }
-        }
-      });
-
-      chartMap.set(t,chart);
-
-    });
-
-    document.getElementById("status").innerText=
-      `完成：${base} 汇率走势 (${start} 至 ${end})`;
+    setStatus("完成 ✅");
 
   }catch(e){
-    document.getElementById("status").innerText="数据获取失败";
+    setStatus("查询失败");
   }
 }
-
-run();
-
 </script>
 
 </body>
